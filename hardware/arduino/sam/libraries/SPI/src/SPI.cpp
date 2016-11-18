@@ -51,10 +51,17 @@ void SPIClass::init() {
 	interruptMask[0] = 0;
 	interruptMask[1] = 0;
 	interruptMask[2] = 0;
-	interruptMask[3] = 0;
-	initCb();
-	SPI_Configure(spi, id, SPI_MR_MSTR | SPI_MR_PS | SPI_MR_MODFDIS);
-	SPI_Enable(spi);
+	interruptMask[3] = 0;	
+    initCb();
+	if(spi == SPI0){
+      SPI_Configure(spi, id, SPI_MR_MSTR | SPI_MR_PS | SPI_MR_MODFDIS);
+	  SPI_Enable(spi);
+    }else{
+      pmc_enable_periph_clk(ID_USART0);
+      USART_Configure(USART0,US_MR_USART_MODE_SPI_MASTER | US_SPI_BPMODE_0 ,4000000,US_MR_USCLKS_MCK);
+      USART_SetTransmitterEnabled(USART0,true);
+      USART_SetReceiverEnabled(USART0,true);
+    }
 	initialized = true;
 }
 
@@ -119,7 +126,13 @@ void SPIClass::beginTransaction(uint8_t pin, SPISettings settings)
 	}
 	uint32_t ch = BOARD_PIN_TO_SPI_CHANNEL(pin);
 	bitOrder[ch] = settings.border;
-	SPI_ConfigureNPCS(spi, ch, settings.config);
+	if(spi == SPI0){
+      SPI_ConfigureNPCS(spi, ch, settings.config);
+    }else{
+      //USART_Configure(USART0,settings.config1,settings.clock1,US_MR_USCLKS_MCK);  
+      USART0->US_MR = settings.config1 & 0xFFFFFF;
+      USART0->US_BRGR = settings.config1 >> 24;
+    }
 	//setBitOrder(pin, settings.border);
 	//setDataMode(pin, settings.datamode);
 	//setClockDivider(pin, settings.clockdiv);
@@ -147,33 +160,49 @@ void SPIClass::end(uint8_t _pin) {
 }
 
 void SPIClass::end() {
-	SPI_Disable(spi);
+	if(spi == SPI0){
+      SPI_Disable(spi);
+    }else{
+      USART_SetTransmitterEnabled(USART0,false);
+      USART_SetReceiverEnabled(USART0,false);
+    }
 	initialized = false;
 }
 
 void SPIClass::setBitOrder(uint8_t _pin, BitOrder _bitOrder) {
-	uint32_t ch = BOARD_PIN_TO_SPI_CHANNEL(_pin);
-	bitOrder[ch] = _bitOrder;
+      uint32_t ch = BOARD_PIN_TO_SPI_CHANNEL(_pin);
+	  bitOrder[ch] = _bitOrder;
 }
 
 void SPIClass::setDataMode(uint8_t _pin, uint8_t _mode) {
 	uint32_t ch = BOARD_PIN_TO_SPI_CHANNEL(_pin);
-	mode[ch] = _mode | SPI_CSR_CSAAT;
-	// SPI_CSR_DLYBCT(1) keeps CS enabled for 32 MCLK after a completed
-	// transfer. Some device needs that for working properly.
-	SPI_ConfigureNPCS(spi, ch, mode[ch] | SPI_CSR_SCBR(divider[ch]) | SPI_CSR_DLYBCT(1));
+    mode[ch] = _mode | SPI_CSR_CSAAT;
+    if(spi == SPI0){      
+	  
+	  // SPI_CSR_DLYBCT(1) keeps CS enabled for 32 MCLK after a completed
+	  // transfer. Some device needs that for working properly.
+	  SPI_ConfigureNPCS(spi, ch, mode[ch] | SPI_CSR_SCBR(divider[ch]) | SPI_CSR_DLYBCT(1));
+    }else{
+      USART0->US_MR = 0x408CE | (mode[ch] & 1) << 16 | (mode[ch] & 2) << 7;
+    }
 }
 
 void SPIClass::setClockDivider(uint8_t _pin, uint8_t _divider) {
-	uint32_t ch = BOARD_PIN_TO_SPI_CHANNEL(_pin);
-	divider[ch] = _divider;
-	// SPI_CSR_DLYBCT(1) keeps CS enabled for 32 MCLK after a completed
-	// transfer. Some device needs that for working properly.
-	SPI_ConfigureNPCS(spi, ch, mode[ch] | SPI_CSR_SCBR(divider[ch]) | SPI_CSR_DLYBCT(1));
+
+    uint32_t ch = BOARD_PIN_TO_SPI_CHANNEL(_pin);
+    divider[ch] = _divider;
+	if(spi == SPI0){
+	  // SPI_CSR_DLYBCT(1) keeps CS enabled for 32 MCLK after a completed
+	  // transfer. Some device needs that for working properly.
+	  SPI_ConfigureNPCS(spi, ch, mode[ch] | SPI_CSR_SCBR(divider[ch]) | SPI_CSR_DLYBCT(1));
+    }else{
+      USART0->US_BRGR = _divider;
+    }
 }
 
 byte SPIClass::transfer(byte _pin, uint8_t _data, SPITransferMode _mode) {
-	uint32_t ch = BOARD_PIN_TO_SPI_CHANNEL(_pin);
+	  
+    uint32_t ch = BOARD_PIN_TO_SPI_CHANNEL(_pin);
 	// Reverse bit order
 	if (bitOrder[ch] == LSBFIRST)
 		_data = __REV(__RBIT(_data));
@@ -181,15 +210,20 @@ byte SPIClass::transfer(byte _pin, uint8_t _data, SPITransferMode _mode) {
 	if (_mode == SPI_LAST)
 		d |= SPI_TDR_LASTXFER;
 
-	// SPI_Write(spi, _channel, _data);
-	while ((spi->SPI_SR & SPI_SR_TDRE) == 0)
-		;
-	spi->SPI_TDR = d;
+    if(spi == SPI0){
+	  // SPI_Write(spi, _channel, _data);
+	  while ((spi->SPI_SR & SPI_SR_TDRE) == 0)
+		  ;
+	  spi->SPI_TDR = d;
 
-	// return SPI_Read(spi);
-	while ((spi->SPI_SR & SPI_SR_RDRF) == 0)
+	  // return SPI_Read(spi);
+	  while ((spi->SPI_SR & SPI_SR_RDRF) == 0)
 		;
-	d = spi->SPI_RDR;
+	  d = spi->SPI_RDR;
+    }else{
+       USART_Write(USART0,d,0);
+       d = USART_GetChar(USART0);
+    }
 	// Reverse bit order
 	if (bitOrder[ch] == LSBFIRST)
 		d = __REV(__RBIT(d));
@@ -230,10 +264,17 @@ void SPIClass::transfer(byte _pin, void *_buf, size_t _count, SPITransferMode _m
 	uint32_t d = *buffer;
 	if (reverse)
 		d = __REV(__RBIT(d));
-	while ((spi->SPI_SR & SPI_SR_TDRE) == 0)
+	
+    if(spi == SPI0){
+    while ((spi->SPI_SR & SPI_SR_TDRE) == 0)
 		;
 	spi->SPI_TDR = d | SPI_PCS(ch);
-
+    }else{
+      while( !(USART0->US_CSR & US_CSR_TXRDY) ){;} 
+      USART0->US_THR = d | SPI_PCS(ch) ;
+//      while(  !(USART0->US_CSR & US_CSR_RXRDY) ){;}
+//      d = USART0->US_RHR;
+    }
 	while (_count > 1) {
 		// Prepare next byte
 		d = *(buffer+1);
@@ -243,11 +284,18 @@ void SPIClass::transfer(byte _pin, void *_buf, size_t _count, SPITransferMode _m
 			d |= SPI_TDR_LASTXFER;
 
 		// Read transferred byte and send next one straight away
-		while ((spi->SPI_SR & SPI_SR_RDRF) == 0)
-			;
-		uint8_t r = spi->SPI_RDR;
-		spi->SPI_TDR = d | SPI_PCS(ch);
-
+		uint8_t r = 0;
+        
+        if(spi == SPI0){
+          while ((spi->SPI_SR & SPI_SR_RDRF) == 0)
+			  ;
+		  r = spi->SPI_RDR;
+		  spi->SPI_TDR = d | SPI_PCS(ch);
+        }else{
+          while(  !(USART0->US_CSR & US_CSR_RXRDY) ){;}
+          r = USART0->US_RHR;
+          USART0->US_THR = d | SPI_PCS(ch);
+        }
 		// Save read byte
 		if (reverse)
 			r = __REV(__RBIT(r));
@@ -257,9 +305,16 @@ void SPIClass::transfer(byte _pin, void *_buf, size_t _count, SPITransferMode _m
 	}
 
 	// Receive the last transferred byte
-	while ((spi->SPI_SR & SPI_SR_RDRF) == 0)
-		;
-	uint8_t r = spi->SPI_RDR;
+	uint8_t r = 0;
+    if(spi == SPI0){
+      while ((spi->SPI_SR & SPI_SR_RDRF) == 0)
+		  ;
+	  r = spi->SPI_RDR;
+    }else{
+      while(  !(USART0->US_CSR & US_CSR_RXRDY) ){;}
+      r = USART0->US_RHR;
+    }
+    
 	if (reverse)
 		r = __REV(__RBIT(r));
 	*buffer = r;
@@ -292,6 +347,21 @@ static void SPI_0_Init(void) {
 			g_APinDescription[PIN_SPI_SCK].ulPinConfiguration);
 }
 
+static void SPI_1_Init(void) {
+	PIO_Configure(
+			g_APinDescription[PIN_SPI1_MOSI].pPort,
+			g_APinDescription[PIN_SPI1_MOSI].ulPinType,
+			g_APinDescription[PIN_SPI1_MOSI].ulPin,
+			g_APinDescription[PIN_SPI1_MOSI].ulPinConfiguration);
+	PIO_Configure(
+			g_APinDescription[PIN_SPI1_SCK].pPort,
+			g_APinDescription[PIN_SPI1_SCK].ulPinType,
+			g_APinDescription[PIN_SPI1_SCK].ulPin,
+			g_APinDescription[PIN_SPI1_SCK].ulPinConfiguration);
+ 
+}
+
 SPIClass SPI(SPI_INTERFACE, SPI_INTERFACE_ID, SPI_0_Init);
+SPIClass SPI1(SPI_INTERFACE+1, ID_USART0, SPI_1_Init);
 #endif
 

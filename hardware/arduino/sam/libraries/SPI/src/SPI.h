@@ -33,10 +33,10 @@
 //   - beginTransaction(pin, SPISettings settings) (if transactions are available)
 #define SPI_HAS_EXTENDED_CS_PIN_HANDLING 1
 
-#define SPI_MODE0 0x02
-#define SPI_MODE1 0x00
-#define SPI_MODE2 0x03
-#define SPI_MODE3 0x01
+#define SPI_MODE0 0x02 //10 Clk polarity 0, clock phase 1, output: falling capture:rising
+#define SPI_MODE1 0x00 //00 Clk polarity 0, clock phase 0, output: rising capture:falling
+#define SPI_MODE2 0x03 //11 Clk polarity 1, clock phase 1, output: rising capture:falling
+#define SPI_MODE3 0x01 //01 Clk polarity 1, clock phase 0, output: falling capture:rising
 
 enum SPITransferMode {
 	SPI_CONTINUE,
@@ -68,8 +68,12 @@ private:
 			div = (F_CPU / (clock + 1)) + 1;
 		}
 		config = (dataMode & 3) | SPI_CSR_CSAAT | SPI_CSR_SCBR(div) | SPI_CSR_DLYBCT(1);
+        config1 = 0x408CE | (dataMode & 1) << 16 | (dataMode & 2) << 7;
+        clock1 = clock;
 	}
 	uint32_t config;
+    uint32_t config1;
+    uint32_t clock1;
 	BitOrder border;
 	friend class SPIClass;
 };
@@ -133,6 +137,7 @@ class SPIClass {
 
 #if SPI_INTERFACES_COUNT > 0
 extern SPIClass SPI;
+extern SPIClass SPI1;
 #endif
 
 // For compatibility with sketches designed for AVR @ 16 MHz

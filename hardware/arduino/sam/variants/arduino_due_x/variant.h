@@ -100,7 +100,7 @@ extern "C"{
 /*
  * SPI Interfaces
  */
-#define SPI_INTERFACES_COUNT 1
+#define SPI_INTERFACES_COUNT 2
 
 #define SPI_INTERFACE        SPI0
 #define SPI_INTERFACE_ID     ID_SPI0
@@ -118,14 +118,25 @@ extern "C"{
 #define BOARD_SPI_SS3        PIN_SPI_SS3
 #define BOARD_SPI_DEFAULT_SS BOARD_SPI_SS3
 
+#define SPI1_INTERFACE        SPI1
+#define SPI1_INTERFACE_ID     ID_USART0
+#define SPI1_CHANNELS_NUM 1
+#define PIN_SPI1_SS0          (2u)
+#define PIN_SPI1_MOSI         (82u)
+#define PIN_SPI1_MISO         (82u)
+#define PIN_SPI1_SCK          (92u)
+#define BOARD_SPI1_SS0        (2u)
+
 #define BOARD_PIN_TO_SPI_PIN(x) \
 	(x==BOARD_SPI_SS0 ? PIN_SPI_SS0 : \
 	(x==BOARD_SPI_SS1 ? PIN_SPI_SS1 : \
-	(x==BOARD_SPI_SS2 ? PIN_SPI_SS2 : PIN_SPI_SS3 )))
+	(x==BOARD_SPI_SS2 ? PIN_SPI_SS2 : \
+    (x==BOARD_SPI1_SS0? PIN_SPI1_SS0: PIN_SPI_SS3 ))))
 #define BOARD_PIN_TO_SPI_CHANNEL(x) \
 	(x==BOARD_SPI_SS0 ? 0 : \
 	(x==BOARD_SPI_SS1 ? 1 : \
-	(x==BOARD_SPI_SS2 ? 2 : 3)))
+	(x==BOARD_SPI_SS2 ? 2 : \
+    (x==BOARD_SPI1_SS0? 0 : 3))))
 
 static const uint8_t SS   = BOARD_SPI_SS0;
 static const uint8_t SS1  = BOARD_SPI_SS1;
@@ -134,6 +145,11 @@ static const uint8_t SS3  = BOARD_SPI_SS3;
 static const uint8_t MOSI = PIN_SPI_MOSI;
 static const uint8_t MISO = PIN_SPI_MISO;
 static const uint8_t SCK  = PIN_SPI_SCK;
+
+static const uint8_t SS4   = BOARD_SPI1_SS0;
+static const uint8_t MOSI1 = PIN_SPI1_MOSI;
+static const uint8_t MISO1 = PIN_SPI1_MISO;
+static const uint8_t SCK1  = PIN_SPI1_SCK;
 
 /*
  * Wire Interfaces
